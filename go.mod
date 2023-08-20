@@ -1,4 +1,4 @@
-module weirdgloop.org/gcf-thumb-handler
+module github.com/weirdgloop/gcf-thumb-handler
 
 go 1.20
 
