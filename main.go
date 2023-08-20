@@ -142,6 +142,7 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 	cmd := exec.Command("vipsthumbnail","--output=." + outType + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
+	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
 		log.Println(out)
