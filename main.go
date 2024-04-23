@@ -31,11 +31,12 @@ func (e *ThumbError) IsNotFound() bool {
 }
 
 type ThumbParams struct {
-	Bucket string // GCS Bucket
-	Dest   string // Thumbnail destination
-	Src    string // Source image path
-	Type   string // Source image file type
-	Width  string // Thumbnail width
+	Bucket    string // GCS Bucket
+	FileExt   string // Source file extension
+	FilePath  string // Source file path
+	ThumbExt  string // Thumbnail file extension
+	ThumbPath string // Thumbnail file path
+	Width     string // Thumbnail width
 }
 
 func main() {
@@ -59,7 +60,7 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 		return ThumbParams{}, errors.New("Unparsable URI")
 	}
 
-	// Extract GCS bucket, wiki ID, archOrTemp, filename, thumbname, and width
+	// Extract GCS bucket, wiki ID, archOrTemp, filename, thumbname, and width.
 	re := regexp.MustCompile("^/([0-9a-zA-Z-_.]+)/([0-9a-zA-Z-_.]+)/thumb/((?:archive|temp)/)?([^/]*)/(([0-9]+)px-.+)$")
 	m := re.FindStringSubmatch(u.Path)
 	// Bad thumb URI
@@ -67,19 +68,52 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 		return ThumbParams{}, errors.New("Bad thumb URI")
 	}
 
-	// Filter file types. MediaWiki does the MIME checking on upload, so this should be safe.
+	// Extract source file extension.
 	s := strings.Split(strings.ToLower(m[4]), ".")
-	if len(s) < 2 || !slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, s[len(s)-1]) {
-		return ThumbParams{}, errors.New("Unsupported file type")
+	fileExt := ""
+	if len(s) >= 2 {
+		fileExt = s[len(s)-1]
+	}
+
+	// Extract thumbnail file extension.
+	s = strings.Split(strings.ToLower(m[5]), ".")
+	thumbExt := ""
+	if len(s) >= 2 {
+		thumbExt = s[len(s)-1]
 	}
 
 	return ThumbParams{
-		Bucket: m[1],
-		Dest:   m[2] + "/thumb/" + m[3] + m[4] + "/" + m[5],
-		Src:    m[2] + "/" + m[3] + m[4],
-		Type:   s[len(s)-1],
-		Width:  m[6],
+		Bucket:    m[1],
+		FileExt:   fileExt,
+		FilePath:  m[2] + "/" + m[3] + m[4],
+		ThumbExt:  thumbExt,
+		ThumbPath: m[2] + "/thumb/" + m[3] + m[4] + "/" + m[5],
+		Width:     m[6],
 	}, nil
+}
+
+func paramValidate(params ThumbParams) (error) {
+	// Filter source file extension. MediaWiki does the MIME checking on upload, so this should be safe.
+	if params.FileExt == "" || !slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, params.FileExt) {
+		return errors.New("Unsupported source file extension")
+	}
+
+	switch params.ThumbExt {
+		case "":
+			// Quick nil check.
+		case "svg":
+			// SVGs are only rasterised as PNGs.
+			if params.ThumbExt == "png" {
+				return nil
+			}
+		default:
+			// Source file extension and thumbnail file extension are expected to match except for SVG rasterisation. JPEG and JPG aren't expected to be mixed.
+			if params.ThumbExt == params.FileExt {
+				return nil
+			}
+	}
+
+	return errors.New("Unsupported thumbnail file extension")
 }
 
 func generateThumb(params ThumbParams) ([]byte, error) {
@@ -92,7 +126,7 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 	defer client.Close()
 
 	// Prepare to read source image.
-	srcObj := client.Bucket(params.Bucket).Object(params.Src)
+	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
 	rc, err := srcObj.NewReader(ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
@@ -116,30 +150,29 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"ReadAll", err}
 	}
 
-	// Perform thumbnailing with ImageMagick.
+	// Perform thumbnailing with VIPS.
 	inOpts := ""
 	options := "strip,"
-	outType := params.Type
-	switch params.Type {
+	switch params.FileExt {
 		case "gif":
-			// For handling animated GIF
+			// For handling animated GIF.
 			inOpts = "[n=-1]"
 		case "jpeg":
 			fallthrough
 		case "jpg":
 			options += "Q=80"
 		case "png":
-			// For handling APNG
+			// For handling APNG.
 			//inOpts = "[n=-1]"
 		case "svg":
-			outType = "png"
+			// No additional options.
 		case "webp":
-			// For handling animated WEBP
+			// For handling animated WEBP.
 			inOpts = "[n=-1]"
 			options += "lossless"
 	}
 
-	cmd := exec.Command("vipsthumbnail","--output=." + outType + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+	cmd := exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
 	cmd.Stderr = os.Stderr
@@ -150,7 +183,7 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 	}
 
 	// Upload thumbnail to GCS.
-	thumbObj := client.Bucket(params.Bucket).Object(params.Dest)
+	thumbObj := client.Bucket(params.Bucket).Object(params.ThumbPath)
 	wc := thumbObj.NewWriter(ctx)
 	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
 		return nil, &ThumbError{"Copy", err}
@@ -183,6 +216,14 @@ func thumbHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("paramExtract: %w", err)
+		return
+	}
+
+	err = paramValidate(params)
+	// Unsupported source or thumbnail file extensions.
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("paramValidate: %w", err)
 		return
 	}
 
