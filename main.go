@@ -17,6 +17,11 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+const (
+	MEDIA_IMAGE = "image"
+	MEDIA_UNKNOWN = "unknown"
+)
+
 type ThumbError struct {
 	Ctx string // Error context
 	Err error  // Error
@@ -34,6 +39,7 @@ type ThumbParams struct {
 	Bucket    string // GCS Bucket
 	FileExt   string // Source file extension
 	FilePath  string // Source file path
+	MediaType string // Source file media type
 	ThumbExt  string // Thumbnail file extension
 	ThumbPath string // Thumbnail file path
 	Width     string // Thumbnail width
@@ -82,10 +88,17 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 		thumbExt = s[len(s)-1]
 	}
 
+	// Determine media type.
+	mediaType := MEDIA_UNKNOWN
+	if slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, fileExt) {
+		mediaType = MEDIA_IMAGE
+	}
+
 	return ThumbParams{
 		Bucket:    m[1],
 		FileExt:   fileExt,
 		FilePath:  m[2] + "/" + m[3] + m[4],
+		MediaType: mediaType,
 		ThumbExt:  thumbExt,
 		ThumbPath: m[2] + "/thumb/" + m[3] + m[4] + "/" + m[5],
 		Width:     m[6],
@@ -94,25 +107,18 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 
 func paramValidate(params ThumbParams) (error) {
 	// Filter source file extension. MediaWiki does the MIME checking on upload, so this should be safe.
-	if params.FileExt == "" || !slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, params.FileExt) {
+	if params.MediaType == MEDIA_UNKNOWN {
 		return errors.New("Unsupported source file extension")
 	}
-
-	switch params.ThumbExt {
-		case "":
-			// Quick nil check.
-		case "svg":
-			// SVGs are only rasterised as PNGs.
-			if params.ThumbExt == "png" {
-				return nil
-			}
-		default:
-			// Source file extension and thumbnail file extension are expected to match except for SVG rasterisation. JPEG and JPG aren't expected to be mixed.
-			if params.ThumbExt == params.FileExt {
-				return nil
-			}
+	// SVGs are only rasterised as PNGs.
+	if params.FileExt == "svg" && params.ThumbExt == "png" {
+		return nil
 	}
-
+	// Source file extension and thumbnail file extension are expected to otherwise match. JPEG and JPG aren't expected to be mixed.
+	if params.ThumbExt == params.FileExt {
+		return nil
+	}
+	// All other thumbnailing situations are unsupported.
 	return errors.New("Unsupported thumbnail file extension")
 }
 
