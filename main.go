@@ -93,7 +93,7 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 	mediaType := MEDIA_UNKNOWN
 	if slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, fileExt) {
 		mediaType = MEDIA_IMAGE
-	} else if slices.Contains([]string{"mp4", "mpeg", "mpg", "ogg", "ogv", "webm"}, fileExt) {
+	} else if slices.Contains([]string{"mp4", "ogg", "ogv", "webm"}, fileExt) {
 		mediaType = MEDIA_VIDEO
 	}
 
@@ -195,10 +195,6 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 		fmt := params.FileExt
 		// Handle format aliases as FFmpeg does not.
 		switch params.FileExt {
-			case "mpeg":
-				fallthrough
-			case "mpg":
-				fmt = "mp4"
 			case "ogv":
 				fmt = "ogg"
 		}
