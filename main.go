@@ -20,6 +20,7 @@ import (
 const (
 	MEDIA_IMAGE = "image"
 	MEDIA_UNKNOWN = "unknown"
+	MEDIA_VIDEO = "video"
 )
 
 type ThumbError struct {
@@ -92,6 +93,8 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 	mediaType := MEDIA_UNKNOWN
 	if slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, fileExt) {
 		mediaType = MEDIA_IMAGE
+	} else if slices.Contains([]string{"mp4", "mpeg", "mpg", "ogg", "ogv", "webm"}, fileExt) {
+		mediaType = MEDIA_VIDEO
 	}
 
 	return ThumbParams{
@@ -112,6 +115,10 @@ func paramValidate(params ThumbParams) (error) {
 	}
 	// SVGs are only rasterised as PNGs.
 	if params.FileExt == "svg" && params.ThumbExt == "png" {
+		return nil
+	}
+	// Videos are only thumbnailed as JPGs.
+	if params.MediaType == MEDIA_VIDEO && params.ThumbExt == "jpg" {
 		return nil
 	}
 	// Source file extension and thumbnail file extension are expected to otherwise match. JPEG and JPG aren't expected to be mixed.
@@ -183,6 +190,30 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 		}
 
 		cmd = exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+	} else if params.MediaType == MEDIA_VIDEO {
+		// Perform thumbnailing with FFmpeg.
+		// Parameters are based on Wikimedia's thumbor video plugin.
+		// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
+		cmd = exec.Command(
+			"ffmpeg",
+			// Input file type.
+			"-f", params.FileExt,
+			// Use stdin as input file.
+			"-i", "pipe:",
+			// Extract 1 frame.
+			"-vframes", "1",
+			// Disable audio.
+			"-an",
+			// Output as thumbnail.
+			"-f", "image2",
+			// Set output dimensions based on desired width.
+			"-vf","scale=" + params.Width + ":-1",
+			// Disable verbose output.
+			"-nostats",
+			"-loglevel", "fatal",
+			// Use stdout as output file.
+			"pipe:1",
+		)
 	} else {
 		// No handler to perform thumbnailing.
 		return nil, &ThumbError{"NoHandler", err}
