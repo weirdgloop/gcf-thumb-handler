@@ -205,7 +205,7 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 			// Disable audio.
 			"-an",
 			// Output as thumbnail.
-			"-f", "image2",
+			"-f", "image2pipe",
 			// Set output dimensions based on desired width.
 			"-vf","scale=" + params.Width + ":-1",
 			// Disable verbose output.
