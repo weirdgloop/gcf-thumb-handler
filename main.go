@@ -156,29 +156,37 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"ReadAll", err}
 	}
 
-	// Perform thumbnailing with VIPS.
-	inOpts := ""
-	options := "strip,"
-	switch params.FileExt {
-		case "gif":
-			// For handling animated GIF.
-			inOpts = "[n=-1]"
-		case "jpeg":
-			fallthrough
-		case "jpg":
-			options += "Q=80"
-		case "png":
-			// For handling APNG.
-			//inOpts = "[n=-1]"
-		case "svg":
-			// No additional options.
-		case "webp":
-			// For handling animated WEBP.
-			inOpts = "[n=-1]"
-			options += "lossless"
-	}
+	// Dummy handler.
+	cmd := exec.Command("false")
+	// Determine real handler.
+	if params.MediaType == MEDIA_IMAGE {
+		// Perform thumbnailing with VIPS.
+		inOpts := ""
+		options := "strip,"
+		switch params.FileExt {
+			case "gif":
+				// For handling animated GIF.
+				inOpts = "[n=-1]"
+			case "jpeg":
+				fallthrough
+			case "jpg":
+				options += "Q=80"
+			case "png":
+				// For handling APNG.
+				//inOpts = "[n=-1]"
+			case "svg":
+				// No additional options.
+			case "webp":
+				// For handling animated WEBP.
+				inOpts = "[n=-1]"
+				options += "lossless"
+		}
 
-	cmd := exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+		cmd = exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+	} else {
+		// No handler to perform thumbnailing.
+		return nil, &ThumbError{"NoHandler", err}
+	}
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
 	cmd.Stderr = os.Stderr
