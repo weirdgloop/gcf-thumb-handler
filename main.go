@@ -129,7 +129,141 @@ func paramValidate(params ThumbParams) (error) {
 	return errors.New("Unsupported thumbnail file extension")
 }
 
-func generateThumb(params ThumbParams) ([]byte, error) {
+func generateThumbFromFile(params ThumbParams) ([]byte, error) {
+	// Initialise GCS client.
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, &ThumbError{"NewClient", err}
+	}
+	defer client.Close()
+
+	// Prepare to read source image.
+	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
+	rc, err := srcObj.NewReader(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return nil, &ThumbError{"NotFound", err}
+		} else {
+			return nil, &ThumbError{"NewReader", err}
+		}
+	}
+	defer rc.Close()
+
+	// Retrieve source image metadata for copying to thumbnail.
+	attrs, err := srcObj.Attrs(ctx)
+	if err != nil {
+		return nil, &ThumbError{"SourceAttrs", err}
+	}
+	metadata := attrs.Metadata
+
+	// Read source image into memory.
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, &ThumbError{"ReadAll", err}
+	}
+
+	// Dummy handler.
+	cmd := exec.Command("false")
+	// Determine real handler.
+	if params.MediaType == MEDIA_IMAGE {
+		// Perform thumbnailing with VIPS.
+		inOpts := ""
+		options := "strip,"
+		switch params.FileExt {
+			case "gif":
+				// For handling animated GIF.
+				inOpts = "[n=-1]"
+			case "jpeg":
+				fallthrough
+			case "jpg":
+				options += "Q=80"
+			case "png":
+				// For handling APNG.
+				//inOpts = "[n=-1]"
+			case "svg":
+				// No additional options.
+			case "webp":
+				// For handling animated WEBP.
+				inOpts = "[n=-1]"
+				options += "lossless"
+		}
+
+		cmd = exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+	} else if params.MediaType == MEDIA_VIDEO {
+		// Perform thumbnailing with FFmpeg.
+		fmt := params.FileExt
+		// Handle format aliases as FFmpeg does not.
+		switch params.FileExt {
+			case "ogv":
+				fmt = "ogg"
+		}
+		// Parameters are based on Wikimedia's thumbor video plugin.
+		// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
+		cmd = exec.Command(
+			"ffmpeg",
+			// Input file type.
+			"-f", fmt,
+			// Use stdin as input file.
+			"-i", "pipe:",
+			// Extract 1 frame.
+			"-vframes", "1",
+			// Disable audio.
+			"-an",
+			// Output as thumbnail.
+			"-f", "image2pipe",
+			// Set output dimensions based on desired width.
+			"-vf", "scale=" + params.Width + ":-1",
+			// Increase output quality.
+			"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
+			// Disable verbose output.
+			"-nostats",
+			"-loglevel", "fatal",
+			// Use stdout as output file.
+			"pipe:1",
+		)
+	} else {
+		// No handler to perform thumbnailing.
+		return nil, &ThumbError{"NoHandler", err}
+	}
+	log.Println(cmd.Args)
+	cmd.Stdin = bytes.NewBuffer(data)
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		log.Println(out)
+		return nil, &ThumbError{"Command", err}
+	}
+
+	// Upload thumbnail to GCS.
+	thumbObj := client.Bucket(params.Bucket).Object(params.ThumbPath)
+	wc := thumbObj.NewWriter(ctx)
+	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
+		return nil, &ThumbError{"Copy", err}
+	}
+	if err = wc.Close(); err != nil {
+		return nil, &ThumbError{"Close", err}
+	}
+
+	// Retrieve thumbnail's GCS metadata.
+	attrs, err = thumbObj.Attrs(ctx)
+	if err != nil {
+		return nil, &ThumbError{"ThumbAttrs", err}
+	}
+
+	// Update thumbnail's GCS metadata with the source image's metadata.
+	objectAttrsToUpdate := storage.ObjectAttrsToUpdate{
+		Metadata: metadata,
+	}
+	if _, err = thumbObj.Update(ctx, objectAttrsToUpdate); err != nil {
+		return nil, &ThumbError{"UpdateAttrs", err}
+	}
+
+	// Also send the image to the client.
+	return out, nil
+}
+
+func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	// Initialise GCS client.
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
@@ -280,7 +414,12 @@ func thumbHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := generateThumb(params)
+	var out []byte
+	if params.FileExt == "mp4" {
+		out, err = generateThumbFromFile(params)
+	} else {
+		out, err = generateThumbFromPipe(params)
+	}
 	// Unable to generate thumbnail.
 	if err != nil {
 		if err.(*ThumbError).IsNotFound() {
