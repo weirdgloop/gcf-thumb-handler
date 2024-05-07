@@ -157,77 +157,42 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	}
 	metadata := attrs.Metadata
 
-	// Read source image into memory.
-	data, err := io.ReadAll(rc)
+	f, err := os.CreateTemp("", "original")
 	if err != nil {
-		return nil, &ThumbError{"ReadAll", err}
+		return nil, &ThumbError{"CreateTemp", err}
+	}
+	defer os.Remove(f.Name())
+
+	if _, err := io.Copy(f, rc); err != nil {
+		return nil, &ThumbError{"Copy", err}
 	}
 
-	// Dummy handler.
-	cmd := exec.Command("false")
-	// Determine real handler.
-	if params.MediaType == MEDIA_IMAGE {
-		// Perform thumbnailing with VIPS.
-		inOpts := ""
-		options := "strip,"
-		switch params.FileExt {
-			case "gif":
-				// For handling animated GIF.
-				inOpts = "[n=-1]"
-			case "jpeg":
-				fallthrough
-			case "jpg":
-				options += "Q=80"
-			case "png":
-				// For handling APNG.
-				//inOpts = "[n=-1]"
-			case "svg":
-				// No additional options.
-			case "webp":
-				// For handling animated WEBP.
-				inOpts = "[n=-1]"
-				options += "lossless"
-		}
+	// Parameters are based on Wikimedia's thumbor video plugin.
+	// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
+	cmd := exec.Command(
+		"ffmpeg",
+		// Input file type.
+		"-f", params.FileExt,
+		// Pass temp file name to ffmpeg.
+		"-i", f.Name(),
+		// Extract 1 frame.
+		"-vframes", "1",
+		// Disable audio.
+		"-an",
+		// Output as thumbnail.
+		"-f", "image2pipe",
+		// Set output dimensions based on desired width.
+		"-vf", "scale=" + params.Width + ":-1",
+		// Increase output quality.
+		"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
+		// Disable verbose output.
+		"-nostats",
+		"-loglevel", "fatal",
+		// Use stdout as output file.
+		"pipe:1",
+	)
 
-		cmd = exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
-	} else if params.MediaType == MEDIA_VIDEO {
-		// Perform thumbnailing with FFmpeg.
-		fmt := params.FileExt
-		// Handle format aliases as FFmpeg does not.
-		switch params.FileExt {
-			case "ogv":
-				fmt = "ogg"
-		}
-		// Parameters are based on Wikimedia's thumbor video plugin.
-		// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
-		cmd = exec.Command(
-			"ffmpeg",
-			// Input file type.
-			"-f", fmt,
-			// Use stdin as input file.
-			"-i", "pipe:",
-			// Extract 1 frame.
-			"-vframes", "1",
-			// Disable audio.
-			"-an",
-			// Output as thumbnail.
-			"-f", "image2pipe",
-			// Set output dimensions based on desired width.
-			"-vf", "scale=" + params.Width + ":-1",
-			// Increase output quality.
-			"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
-			// Disable verbose output.
-			"-nostats",
-			"-loglevel", "fatal",
-			// Use stdout as output file.
-			"pipe:1",
-		)
-	} else {
-		// No handler to perform thumbnailing.
-		return nil, &ThumbError{"NoHandler", err}
-	}
 	log.Println(cmd.Args)
-	cmd.Stdin = bytes.NewBuffer(data)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
@@ -243,6 +208,11 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	}
 	if err = wc.Close(); err != nil {
 		return nil, &ThumbError{"Close", err}
+	}
+
+	// Close temp file.
+	if err = f.Close(); err != nil {
+		return nil, &ThumbError{"CloseTemp", err}
 	}
 
 	// Retrieve thumbnail's GCS metadata.
@@ -297,9 +267,8 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"ReadAll", err}
 	}
 
-	// Dummy handler.
-	cmd := exec.Command("false")
-	// Determine real handler.
+	// Determine handler.
+	var cmd *exec.Cmd
 	if params.MediaType == MEDIA_IMAGE {
 		// Perform thumbnailing with VIPS.
 		inOpts := ""
@@ -328,9 +297,8 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 		// Perform thumbnailing with FFmpeg.
 		fmt := params.FileExt
 		// Handle format aliases as FFmpeg does not.
-		switch params.FileExt {
-			case "ogv":
-				fmt = "ogg"
+		if fmt == "ogv" {
+			fmt = "ogg"
 		}
 		// Parameters are based on Wikimedia's thumbor video plugin.
 		// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
