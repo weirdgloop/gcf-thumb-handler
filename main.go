@@ -213,7 +213,9 @@ func generateThumb(params ThumbParams) ([]byte, error) {
 			// Output as thumbnail.
 			"-f", "image2pipe",
 			// Set output dimensions based on desired width.
-			"-vf","scale=" + params.Width + ":-1",
+			"-vf", "scale=" + params.Width + ":-1",
+			// Increase output quality.
+			"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
 			// Disable verbose output.
 			"-nostats",
 			"-loglevel", "fatal",
