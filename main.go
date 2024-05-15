@@ -91,7 +91,7 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 
 	// Determine media type.
 	mediaType := MEDIA_UNKNOWN
-	if slices.Contains([]string{"png", "gif", "jpg", "jpeg", "svg", "webp"}, fileExt) {
+	if slices.Contains([]string{"png", "gif", "jpg", "jpeg", "webp"}, fileExt) {
 		mediaType = MEDIA_IMAGE
 	} else if slices.Contains([]string{"mp4", "ogg", "ogv", "webm"}, fileExt) {
 		mediaType = MEDIA_VIDEO
@@ -112,10 +112,6 @@ func paramValidate(params ThumbParams) (error) {
 	// Filter source file extension. MediaWiki does the MIME checking on upload, so this should be safe.
 	if params.MediaType == MEDIA_UNKNOWN {
 		return errors.New("Unsupported source file extension")
-	}
-	// SVGs are only rasterised as PNGs.
-	if params.FileExt == "svg" && params.ThumbExt == "png" {
-		return nil
 	}
 	// Videos are only thumbnailed as JPGs.
 	if params.MediaType == MEDIA_VIDEO && params.ThumbExt == "jpg" {
@@ -284,8 +280,6 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 			case "png":
 				// For handling APNG.
 				//inOpts = "[n=-1]"
-			case "svg":
-				// No additional options.
 			case "webp":
 				// For handling animated WEBP.
 				inOpts = "[n=-1]"
