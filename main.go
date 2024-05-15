@@ -113,8 +113,8 @@ func paramValidate(params ThumbParams) (error) {
 	if params.MediaType == MEDIA_UNKNOWN {
 		return errors.New("Unsupported source file extension")
 	}
-	// SVGs are only rasterised as PNGs.
-	if params.FileExt == "svg" && params.ThumbExt == "png" {
+	// Images are only thumbnailed as PNGs.
+	if params.MediaType == MEDIA_IMAGE && params.ThumbExt == "png" {
 		return nil
 	}
 	// Videos are only thumbnailed as JPGs.
