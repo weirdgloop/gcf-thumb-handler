@@ -276,7 +276,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 			case "jpeg":
 				fallthrough
 			case "jpg":
-				options += "Q=90"
+				options += "Q=96"
 			case "png":
 				// For handling APNG.
 				//inOpts = "[n=-1]"
