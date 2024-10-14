@@ -199,6 +199,9 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	// Upload thumbnail to GCS.
 	thumbObj := client.Bucket(params.Bucket).Object(params.ThumbPath)
 	wc := thumbObj.NewWriter(ctx)
+	// Use the source image's metadata for the thumbnail's metadata.
+	wc.ObjectAttrs.Metadata = metadata
+
 	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
 		return nil, &ThumbError{"Copy", err}
 	}
@@ -211,21 +214,7 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"CloseTemp", err}
 	}
 
-	// Retrieve thumbnail's GCS metadata.
-	attrs, err = thumbObj.Attrs(ctx)
-	if err != nil {
-		return nil, &ThumbError{"ThumbAttrs", err}
-	}
-
-	// Update thumbnail's GCS metadata with the source image's metadata.
-	objectAttrsToUpdate := storage.ObjectAttrsToUpdate{
-		Metadata: metadata,
-	}
-	if _, err = thumbObj.Update(ctx, objectAttrsToUpdate); err != nil {
-		return nil, &ThumbError{"UpdateAttrs", err}
-	}
-
-	// Also send the image to the client.
+	// Send the image to the client.
 	return out, nil
 }
 
@@ -334,6 +323,9 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	// Upload thumbnail to GCS.
 	thumbObj := client.Bucket(params.Bucket).Object(params.ThumbPath)
 	wc := thumbObj.NewWriter(ctx)
+	// Use the source image's metadata for the thumbnail's metadata.
+	wc.ObjectAttrs.Metadata = metadata
+
 	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
 		return nil, &ThumbError{"Copy", err}
 	}
@@ -341,21 +333,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"Close", err}
 	}
 
-	// Retrieve thumbnail's GCS metadata.
-	attrs, err = thumbObj.Attrs(ctx)
-	if err != nil {
-		return nil, &ThumbError{"ThumbAttrs", err}
-	}
-
-	// Update thumbnail's GCS metadata with the source image's metadata.
-	objectAttrsToUpdate := storage.ObjectAttrsToUpdate{
-		Metadata: metadata,
-	}
-	if _, err = thumbObj.Update(ctx, objectAttrsToUpdate); err != nil {
-		return nil, &ThumbError{"UpdateAttrs", err}
-	}
-
-	// Also send the image to the client.
+	// Send the image to the client.
 	return out, nil
 }
 
