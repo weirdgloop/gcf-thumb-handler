@@ -203,15 +203,15 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	wc.ObjectAttrs.Metadata = metadata
 
 	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
-		return nil, &ThumbError{"Copy", err}
+		return out, &ThumbError{"Copy", err}
 	}
 	if err = wc.Close(); err != nil {
-		return nil, &ThumbError{"Close", err}
+		return out, &ThumbError{"Close", err}
 	}
 
 	// Close temp file.
 	if err = f.Close(); err != nil {
-		return nil, &ThumbError{"CloseTemp", err}
+		return out, &ThumbError{"CloseTemp", err}
 	}
 
 	// Send the image to the client.
@@ -327,10 +327,10 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	wc.ObjectAttrs.Metadata = metadata
 
 	if _, err = io.Copy(wc, bytes.NewBuffer(out)); err != nil {
-		return nil, &ThumbError{"Copy", err}
+		return out, &ThumbError{"Copy", err}
 	}
 	if err = wc.Close(); err != nil {
-		return nil, &ThumbError{"Close", err}
+		return out, &ThumbError{"Close", err}
 	}
 
 	// Send the image to the client.
@@ -364,7 +364,7 @@ func thumbHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err.(*ThumbError).IsNotFound() {
 			w.WriteHeader(http.StatusNotFound)
-		} else {
+		} else if out == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		log.Println(err)
