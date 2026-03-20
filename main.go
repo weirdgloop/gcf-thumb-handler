@@ -128,9 +128,9 @@ func paramValidate(params ThumbParams) error {
 func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	// Initialise GCS client.
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, storage.WithJSONReads())
+	client, err := storage.NewGRPCClient(ctx)
 	if err != nil {
-		return nil, &ThumbError{"NewClient", err}
+		return nil, &ThumbError{"NewGRPCClient", err}
 	}
 	defer client.Close()
 
@@ -221,9 +221,9 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	// Initialise GCS client.
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, storage.WithJSONReads())
+	client, err := storage.NewGRPCClient(ctx)
 	if err != nil {
-		return nil, &ThumbError{"NewClient", err}
+		return nil, &ThumbError{"NewGRPCClient", err}
 	}
 	defer client.Close()
 
