@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	MEDIA_IMAGE = "image"
+	MEDIA_IMAGE   = "image"
 	MEDIA_UNKNOWN = "unknown"
-	MEDIA_VIDEO = "video"
+	MEDIA_VIDEO   = "video"
 )
 
 type ThumbError struct {
@@ -108,7 +108,7 @@ func paramExtract(rawURL string) (ThumbParams, error) {
 	}, nil
 }
 
-func paramValidate(params ThumbParams) (error) {
+func paramValidate(params ThumbParams) error {
 	// Filter source file extension. MediaWiki does the MIME checking on upload, so this should be safe.
 	if params.MediaType == MEDIA_UNKNOWN {
 		return errors.New("Unsupported source file extension")
@@ -178,7 +178,7 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 		// Output as thumbnail.
 		"-f", "image2pipe",
 		// Set output dimensions based on desired width.
-		"-vf", "scale=" + params.Width + ":-1",
+		"-vf", "scale="+params.Width+":-1",
 		// Increase output quality.
 		"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
 		// Disable verbose output.
@@ -259,23 +259,23 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 		inOpts := ""
 		options := "strip,"
 		switch params.FileExt {
-			case "gif":
-				// For handling animated GIF.
-				inOpts = "[n=-1]"
-			case "jpeg":
-				fallthrough
-			case "jpg":
-				options += "Q=96"
-			case "png":
-				// For handling APNG.
-				//inOpts = "[n=-1]"
-			case "webp":
-				// For handling animated WEBP.
-				inOpts = "[n=-1]"
-				options += "lossless"
+		case "gif":
+			// For handling animated GIF.
+			inOpts = "[n=-1]"
+		case "jpeg":
+			fallthrough
+		case "jpg":
+			options += "Q=96"
+		case "png":
+			// For handling APNG.
+			//inOpts = "[n=-1]"
+		case "webp":
+			// For handling animated WEBP.
+			inOpts = "[n=-1]"
+			options += "lossless"
 		}
 
-		cmd = exec.Command("vipsthumbnail","--output=." + params.ThumbExt + "[" + options + "]","--size=" + params.Width + "x","--vips-concurrency=1","stdin" + inOpts)
+		cmd = exec.Command("vipsthumbnail", "--output=."+params.ThumbExt+"["+options+"]", "--size="+params.Width+"x", "--vips-concurrency=1", "stdin"+inOpts)
 	} else if params.MediaType == MEDIA_VIDEO {
 		// Perform thumbnailing with FFmpeg.
 		fmt := params.FileExt
@@ -298,7 +298,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 			// Output as thumbnail.
 			"-f", "image2pipe",
 			// Set output dimensions based on desired width.
-			"-vf", "scale=" + params.Width + ":-1",
+			"-vf", "scale="+params.Width+":-1",
 			// Increase output quality.
 			"-qscale:v", "1", "-qmin", "1", "-qmax", "1",
 			// Disable verbose output.
