@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"github.com/googleapis/gax-go/v2/apierror"
 	"golang.org/x/exp/slices"
 )
 
@@ -138,6 +139,10 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
 	rc, err := srcObj.NewReader(ctx)
 	if err != nil {
+		// Don't know why, but checking this before the storage error fixes the storage error checking.
+		if ae, ok := errors.AsType[*apierror.APIError](err); ok {
+			log.Println("APIError", ae)
+		}
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, &ThumbError{"NotFound", err}
 		} else {
@@ -231,6 +236,10 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
 	rc, err := srcObj.NewReader(ctx)
 	if err != nil {
+		// Don't know why, but checking this before the storage error fixes the storage error checking.
+		if ae, ok := errors.AsType[*apierror.APIError](err); ok {
+			log.Println("APIError", ae)
+		}
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, &ThumbError{"NotFound", err}
 		} else {
