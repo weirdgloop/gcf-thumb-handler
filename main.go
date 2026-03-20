@@ -138,7 +138,7 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
 	rc, err := srcObj.NewReader(ctx)
 	if err != nil {
-		if err == storage.ErrObjectNotExist {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, &ThumbError{"NotFound", err}
 		} else {
 			return nil, &ThumbError{"NewReader", err}
@@ -231,7 +231,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	srcObj := client.Bucket(params.Bucket).Object(params.FilePath)
 	rc, err := srcObj.NewReader(ctx)
 	if err != nil {
-		if err == storage.ErrObjectNotExist {
+		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, &ThumbError{"NotFound", err}
 		} else {
 			return nil, &ThumbError{"NewReader", err}
