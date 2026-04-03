@@ -114,6 +114,10 @@ func paramValidate(params ThumbParams) error {
 	if params.MediaType == MEDIA_UNKNOWN {
 		return errors.New("Unsupported source file extension")
 	}
+	// Can't have zero-width thumbnails.
+	if params.Width == "0" {
+		return errors.New("Unsupported thumbnail width")
+	}
 	// Videos are only thumbnailed as JPGs.
 	if params.MediaType == MEDIA_VIDEO && params.ThumbExt == "jpg" {
 		return nil
