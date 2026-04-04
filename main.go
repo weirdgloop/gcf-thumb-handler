@@ -172,12 +172,18 @@ func generateThumbFromFile(params ThumbParams) ([]byte, error) {
 		return nil, &ThumbError{"Copy", err}
 	}
 
+	// Perform thumbnailing with FFmpeg.
+	fmt := params.FileExt
+	// Handle format aliases as FFmpeg does not.
+	if fmt == "ogv" {
+		fmt = "ogg"
+	}
 	// Parameters are based on Wikimedia's thumbor video plugin.
 	// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
 	cmd := exec.Command(
 		"ffmpeg",
 		// Input file type.
-		"-f", params.FileExt,
+		"-f", fmt,
 		// Pass temp file name to ffmpeg.
 		"-i", f.Name(),
 		// Extract 1 frame.
@@ -291,17 +297,12 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 		cmd = exec.Command("vipsthumbnail", "--output=."+params.ThumbExt+"["+options+"]", "--size="+params.Width+"x", "--vips-concurrency=1", "stdin"+inOpts)
 	} else if params.MediaType == MEDIA_VIDEO {
 		// Perform thumbnailing with FFmpeg.
-		fmt := params.FileExt
-		// Handle format aliases as FFmpeg does not.
-		if fmt == "ogv" {
-			fmt = "ogg"
-		}
 		// Parameters are based on Wikimedia's thumbor video plugin.
 		// https://github.com/wikimedia/operations-software-thumbor-plugins/blob/7fe573abee23729964889caf20b78349205f0f97/wikimedia_thumbor/loader/video/__init__.py#L156
 		cmd = exec.Command(
 			"ffmpeg",
 			// Input file type.
-			"-f", fmt,
+			"-f", params.FileExt,
 			// Use stdin as input file.
 			"-i", "pipe:",
 			// Extract 1 frame.
@@ -368,7 +369,7 @@ func thumbHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var out []byte
-	if params.FileExt == "mp4" {
+	if slices.Contains([]string{"mp4", "ogg", "ogv"}, params.FileExt) {
 		out, err = generateThumbFromFile(params)
 	} else {
 		out, err = generateThumbFromPipe(params)
