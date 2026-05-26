@@ -362,7 +362,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 
 func thumbHandler(w http.ResponseWriter, r *http.Request) {
 	params, err := paramExtract(r.RequestURI)
-	// Unusable request URI
+	// Unusable request URI.
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("paramExtract: %w", err)
