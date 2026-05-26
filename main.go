@@ -287,7 +287,7 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 			options += "Q=96"
 		case "png":
 			// For handling APNG.
-			//inOpts = "[n=-1]"
+			inOpts = "[n=-1]"
 		case "webp":
 			// For handling animated WEBP.
 			inOpts = "[n=-1]"
