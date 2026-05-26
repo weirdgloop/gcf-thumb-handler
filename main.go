@@ -33,6 +33,10 @@ func (e *ThumbError) Error() string {
 	return e.Ctx + ": " + e.Err.Error()
 }
 
+func (e *ThumbError) IsBadRequest() bool {
+	return strings.HasPrefix(e.Ctx, "BadRequest")
+}
+
 func (e *ThumbError) IsNotFound() bool {
 	return e.Ctx == "NotFound"
 }
@@ -294,7 +298,8 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 			options += "lossless"
 		}
 
-		cmd = exec.Command("vipsthumbnail", "--output=."+params.ThumbExt+"["+options+"]", "--size="+params.Width+"x", "--vips-concurrency=1", "stdin"+inOpts)
+		// We've added to vipsthumbnail an option to fail if target dimensions would be the same or larger by adding '@' to the size parameter.
+		cmd = exec.Command("vipsthumbnail", "--output=."+params.ThumbExt+"["+options+"]", "--size="+params.Width+"x@", "--vips-concurrency=1", "stdin"+inOpts)
 	} else if params.MediaType == MEDIA_VIDEO {
 		// Perform thumbnailing with FFmpeg.
 		// Parameters are based on Wikimedia's thumbor video plugin.
@@ -327,11 +332,15 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	}
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
-	cmd.Stderr = os.Stderr
-	out, err := cmd.Output()
+	//cmd.Stderr = os.Stderr
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Println(out)
-		return nil, &ThumbError{"Command", err}
+		if strings.Contains(string(out), "Target dimensions would be the same or larger.") {
+			return nil, &ThumbError{"BadRequestLargerDimensions", err}
+		} else {
+			log.Print(string(out))
+			return nil, &ThumbError{"Command", err}
+		}
 	}
 
 	// Upload thumbnail to GCS.
@@ -376,7 +385,9 @@ func thumbHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Unable to generate thumbnail.
 	if err != nil {
-		if err.(*ThumbError).IsNotFound() {
+		if err.(*ThumbError).IsBadRequest() {
+			w.WriteHeader(http.StatusBadRequest)
+		} else if err.(*ThumbError).IsNotFound() {
 			w.WriteHeader(http.StatusNotFound)
 		} else if out == nil {
 			w.WriteHeader(http.StatusInternalServerError)
