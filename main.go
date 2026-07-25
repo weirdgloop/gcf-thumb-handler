@@ -300,6 +300,8 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 
 		// We've added to vipsthumbnail an option to fail if target dimensions would be the same or larger by adding '@' to the size parameter.
 		cmd = exec.Command("vipsthumbnail", "--output=."+params.ThumbExt+"["+options+"]", "--size="+params.Width+"x@", "--vips-concurrency=1", "stdin"+inOpts)
+		// Disable vipsthumbnail warnings. They aren't useful for our purposes.
+		cmd.Env = append(cmd.Environ(), "VIPS_WARNING=0")
 	} else if params.MediaType == MEDIA_VIDEO {
 		// Perform thumbnailing with FFmpeg.
 		// Parameters are based on Wikimedia's thumbor video plugin.
@@ -332,10 +334,10 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	}
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
-	//cmd.Stderr = os.Stderr
-	out, err := cmd.CombinedOutput()
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
 	if err != nil {
-		if strings.Contains(string(out), "Target dimensions would be the same or larger.") {
+		if strings.Contains(string(err.Error()), "Target dimensions would be the same or larger.") {
 			return nil, &ThumbError{"BadRequestLargerDimensions", err}
 		} else {
 			log.Print(string(out))
