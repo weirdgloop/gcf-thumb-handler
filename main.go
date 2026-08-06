@@ -338,7 +338,8 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if strings.Contains(string(err.Error()), "Target dimensions would be the same or larger.") {
-			return nil, &ThumbError{"BadRequestLargerDimensions", err}
+			// WG-444: Return the original buffer without writing to GCS
+			return data, nil
 		} else {
 			log.Print(string(out))
 			return nil, &ThumbError{"Command", err}
