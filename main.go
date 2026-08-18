@@ -334,16 +334,22 @@ func generateThumbFromPipe(params ThumbParams) ([]byte, error) {
 	}
 	log.Println(cmd.Args)
 	cmd.Stdin = bytes.NewBuffer(data)
-	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
-		if strings.Contains(string(err.Error()), "Target dimensions would be the same or larger.") {
-			// WG-444: Return the original buffer without writing to GCS
-			return data, nil
-		} else {
-			log.Print(string(out))
-			return nil, &ThumbError{"Command", err}
+		log.Print(string(out))
+
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderrString := string(exitErr.Stderr)
+			log.Print(stderrString)
+
+			if strings.Contains(stderrString, "Target dimensions would be the same or larger.") {
+				// WG-444: Return the original buffer without writing to GCS
+				return data, nil
+			}
 		}
+
+		return nil, &ThumbError{"Command", err}
 	}
 
 	// Upload thumbnail to GCS.
